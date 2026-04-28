@@ -1,0 +1,177 @@
+{
+	"info": {
+		"_postman_id": "ocr-api-v1",
+		"name": "OCR API — Visiting Card Scanner",
+		"description": "Test collection for the ERPNext OCR backend. Set `base_url` and `api_key` in the collection variables.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://127.0.0.1:8000",
+			"type": "string"
+		},
+		{
+			"key": "api_key",
+			"value": "test123",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/health",
+					"host": ["{{base_url}}"],
+					"path": ["health"]
+				},
+				"description": "Confirms the server is up. No auth needed."
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('Status 200', () => pm.response.to.have.status(200));",
+							"pm.test('Status ok', () => {",
+							"    const json = pm.response.json();",
+							"    pm.expect(json.status).to.eql('ok');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"response": []
+		},
+		{
+			"name": "Scan Visiting Card",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "{{api_key}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "file",
+							"description": "JPG or PNG visiting card image",
+							"type": "file",
+							"src": ""
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/ocr",
+					"host": ["{{base_url}}"],
+					"path": ["api", "v1", "ocr"]
+				},
+				"description": "Upload a visiting card image. Returns extracted text, per-line bounding boxes, and overall confidence."
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('Status 200', () => pm.response.to.have.status(200));",
+							"pm.test('Has request_id', () => {",
+							"    const json = pm.response.json();",
+							"    pm.expect(json).to.have.property('request_id');",
+							"    pm.expect(json.status).to.eql('success');",
+							"});",
+							"pm.test('Has lines array', () => {",
+							"    pm.expect(pm.response.json().lines).to.be.an('array');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"response": []
+		},
+		{
+			"name": "Scan Card — Invalid API Key",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "x-api-key",
+						"value": "wrong-key",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "file",
+							"type": "file",
+							"src": ""
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/ocr",
+					"host": ["{{base_url}}"],
+					"path": ["api", "v1", "ocr"]
+				},
+				"description": "Expects 401 Unauthorized."
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('Status 401', () => pm.response.to.have.status(401));"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"response": []
+		},
+		{
+			"name": "Scan Card — No API Key Header",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "file",
+							"type": "file",
+							"src": ""
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}/api/v1/ocr",
+					"host": ["{{base_url}}"],
+					"path": ["api", "v1", "ocr"]
+				},
+				"description": "Expects 422 — missing required header."
+			},
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test('Status 422', () => pm.response.to.have.status(422));"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"response": []
+		}
+	]
+}
