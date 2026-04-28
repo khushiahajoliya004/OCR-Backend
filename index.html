@@ -3,64 +3,100 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Card Scanner</title>
+  <title>Card Scanner — OCR</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f0f2f5;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f4f6fb;
       min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      padding: 32px 16px;
     }
 
-    .container {
-      width: 100%;
-      max-width: 520px;
+    /* ── Hero header ─────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, #1e3a8a 0%, #3b5bdb 60%, #6366f1 100%);
+      padding: 36px 24px 64px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
     }
 
-    h1 {
-      font-size: 22px;
-      font-weight: 700;
-      color: #1a1a2e;
-      margin-bottom: 6px;
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
     }
 
-    .subtitle {
-      font-size: 13px;
-      color: #888;
-      margin-bottom: 24px;
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25);
+      color: #e0e7ff;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 5px 14px;
+      border-radius: 20px;
+      margin-bottom: 16px;
     }
 
-    /* ── Upload card ─────────────────────────────────── */
-    .upload-card {
+    .hero h1 {
+      font-size: 32px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.5px;
+      margin-bottom: 10px;
+    }
+
+    .hero p {
+      font-size: 14px;
+      color: rgba(255,255,255,0.7);
+      max-width: 360px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* ── Page body ───────────────────────────────────────── */
+    .page-body {
+      max-width: 540px;
+      margin: -36px auto 48px;
+      padding: 0 16px;
+      position: relative;
+    }
+
+    /* ── Cards ───────────────────────────────────────────── */
+    .card {
       background: #fff;
-      border-radius: 14px;
-      padding: 24px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05);
       margin-bottom: 20px;
     }
 
+    /* ── Drop zone ───────────────────────────────────────── */
     .drop-zone {
-      border: 2px dashed #c8ccd4;
-      border-radius: 10px;
-      padding: 32px 16px;
+      border: 2px dashed #cbd5e1;
+      border-radius: 14px;
+      padding: 40px 20px;
       text-align: center;
       cursor: pointer;
-      transition: border-color 0.2s, background 0.2s;
+      transition: all 0.25s ease;
       position: relative;
+      background: #fafbff;
     }
 
     .drop-zone:hover,
     .drop-zone.dragover {
-      border-color: #4f6ef7;
-      background: #f5f7ff;
+      border-color: #3b5bdb;
+      background: #eef2ff;
+      transform: translateY(-1px);
     }
 
     .drop-zone input[type="file"] {
@@ -72,35 +108,41 @@
       height: 100%;
     }
 
-    .drop-icon {
-      font-size: 36px;
-      margin-bottom: 8px;
+    .drop-zone-icon {
+      width: 56px;
+      height: 56px;
+      background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      margin: 0 auto 14px;
     }
 
-    .drop-text {
-      font-size: 14px;
-      color: #555;
-    }
-
-    .drop-text span {
-      color: #4f6ef7;
+    .drop-title {
+      font-size: 15px;
       font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 4px;
     }
 
-    .drop-hint {
-      font-size: 11px;
-      color: #aaa;
-      margin-top: 4px;
+    .drop-title span { color: #3b5bdb; }
+
+    .drop-sub {
+      font-size: 12px;
+      color: #94a3b8;
     }
 
-    /* Camera button row */
+    /* ── Or divider ──────────────────────────────────────── */
     .or-row {
       display: flex;
       align-items: center;
       gap: 12px;
-      margin: 16px 0;
-      color: #bbb;
+      margin: 20px 0;
+      color: #cbd5e1;
       font-size: 12px;
+      font-weight: 500;
     }
 
     .or-row::before,
@@ -108,94 +150,108 @@
       content: '';
       flex: 1;
       height: 1px;
-      background: #e5e5e5;
+      background: #f1f5f9;
     }
 
+    /* ── Camera button ───────────────────────────────────── */
     .btn-camera {
       width: 100%;
-      padding: 11px;
-      border: 1.5px solid #d0d4de;
-      border-radius: 9px;
+      padding: 13px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 12px;
       background: #fff;
-      color: #444;
+      color: #475569;
       font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      transition: border-color 0.2s, background 0.2s;
+      transition: all 0.2s;
     }
 
     .btn-camera:hover {
-      border-color: #4f6ef7;
-      background: #f5f7ff;
-      color: #4f6ef7;
+      border-color: #3b5bdb;
+      background: #eef2ff;
+      color: #3b5bdb;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59,91,219,0.12);
     }
 
-    /* Preview */
+    /* ── Preview ─────────────────────────────────────────── */
     #preview-wrap {
       display: none;
-      margin-top: 16px;
-      border-radius: 10px;
+      margin-top: 20px;
+      border-radius: 14px;
       overflow: hidden;
       position: relative;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
     }
 
     #preview-wrap img {
       width: 100%;
       display: block;
-      max-height: 280px;
+      max-height: 260px;
       object-fit: contain;
-      background: #f7f8fa;
+      background: #f8fafc;
     }
 
     #remove-btn {
       position: absolute;
-      top: 8px;
-      right: 8px;
-      background: rgba(0,0,0,0.55);
+      top: 10px;
+      right: 10px;
+      background: rgba(15,23,42,0.65);
+      backdrop-filter: blur(4px);
       color: #fff;
       border: none;
       border-radius: 50%;
-      width: 28px;
-      height: 28px;
-      font-size: 16px;
+      width: 30px;
+      height: 30px;
+      font-size: 14px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      line-height: 1;
+      transition: background 0.2s;
     }
+
+    #remove-btn:hover { background: rgba(220,38,38,0.8); }
 
     #file-name {
-      font-size: 12px;
-      color: #777;
-      margin-top: 8px;
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 10px;
       text-align: center;
+      font-weight: 500;
     }
 
-    /* Scan button */
+    /* ── Scan button ─────────────────────────────────────── */
     .btn-scan {
       width: 100%;
-      margin-top: 16px;
-      padding: 13px;
-      background: #4f6ef7;
+      margin-top: 20px;
+      padding: 15px;
+      background: linear-gradient(135deg, #1e3a8a, #3b5bdb);
       color: #fff;
       border: none;
-      border-radius: 10px;
+      border-radius: 13px;
       font-size: 15px;
-      font-weight: 600;
+      font-weight: 700;
+      font-family: inherit;
       cursor: pointer;
-      transition: background 0.2s, transform 0.1s;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 10px;
+      letter-spacing: 0.02em;
+      transition: all 0.25s ease;
+      box-shadow: 0 4px 16px rgba(59,91,219,0.35);
     }
 
     .btn-scan:hover:not(:disabled) {
-      background: #3a57e0;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(59,91,219,0.45);
     }
 
     .btn-scan:active:not(:disabled) {
@@ -203,236 +259,307 @@
     }
 
     .btn-scan:disabled {
-      background: #a0adee;
+      background: linear-gradient(135deg, #93a5d4, #a5b4e8);
+      box-shadow: none;
       cursor: not-allowed;
     }
 
-    /* Spinner */
+    /* ── Spinner ─────────────────────────────────────────── */
     .spinner {
       width: 18px;
       height: 18px;
-      border: 2.5px solid rgba(255,255,255,0.4);
+      border: 2.5px solid rgba(255,255,255,0.35);
       border-top-color: #fff;
       border-radius: 50%;
       animation: spin 0.75s linear infinite;
       display: none;
+      flex-shrink: 0;
     }
 
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Result card ─────────────────────────────────── */
-    #result-section {
-      display: none;
+    /* ── Result section ──────────────────────────────────── */
+    #result-section { display: none; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
     .result-card {
       background: #fff;
-      border-radius: 14px;
-      padding: 24px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05);
+      animation: fadeUp 0.35s ease forwards;
     }
 
-    .result-header {
+    .result-top {
+      background: linear-gradient(135deg, #1e3a8a, #3b5bdb);
+      padding: 20px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 20px;
+    }
+
+    .result-top-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .result-top-icon {
+      width: 36px;
+      height: 36px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
     }
 
     .result-title {
       font-size: 15px;
       font-weight: 700;
-      color: #1a1a2e;
+      color: #fff;
     }
 
-    .badge-success {
-      background: #e8f8f0;
-      color: #2e9e60;
+    .result-subtitle {
       font-size: 11px;
-      font-weight: 600;
-      padding: 3px 10px;
-      border-radius: 20px;
-    }
-
-    .field-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      padding: 12px 0;
-      border-bottom: 1px solid #f0f0f0;
-    }
-
-    .field-row:last-child {
-      border-bottom: none;
-    }
-
-    .field-icon {
-      font-size: 18px;
-      width: 28px;
-      flex-shrink: 0;
+      color: rgba(255,255,255,0.6);
       margin-top: 1px;
     }
 
-    .field-body {
-      flex: 1;
+    .badge-success {
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.3);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 20px;
+      letter-spacing: 0.03em;
     }
 
+    .result-body { padding: 8px 0; }
+
+    /* ── Field rows ──────────────────────────────────────── */
+    .field-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 14px 24px;
+      border-bottom: 1px solid #f1f5f9;
+      transition: background 0.15s;
+    }
+
+    .field-row:last-child { border-bottom: none; }
+    .field-row:hover { background: #fafbff; }
+
+    .field-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      flex-shrink: 0;
+    }
+
+    .icon-name        { background: #eff6ff; }
+    .icon-designation { background: #f0fdf4; }
+    .icon-company     { background: #fef3c7; }
+    .icon-phone       { background: #ecfdf5; }
+    .icon-email       { background: #fdf4ff; }
+    .icon-website     { background: #f0f9ff; }
+    .icon-address     { background: #fff7ed; }
+
+    .field-body { flex: 1; min-width: 0; }
+
     .field-label {
-      font-size: 11px;
-      color: #aaa;
+      font-size: 10px;
+      color: #94a3b8;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 600;
-      margin-bottom: 2px;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+      margin-bottom: 3px;
     }
 
     .field-value {
       font-size: 14px;
-      color: #222;
+      color: #1e293b;
       font-weight: 500;
-      word-break: break-all;
+      word-break: break-word;
+      line-height: 1.5;
     }
 
     .field-value a {
-      color: #4f6ef7;
+      color: #3b5bdb;
       text-decoration: none;
+      font-weight: 600;
     }
 
-    .field-value a:hover {
-      text-decoration: underline;
-    }
+    .field-value a:hover { text-decoration: underline; }
 
+    /* ── Confidence bar ──────────────────────────────────── */
     .conf-bar-wrap {
-      margin-top: 4px;
+      margin-top: 6px;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 7px;
     }
 
     .conf-bar {
-      height: 3px;
-      border-radius: 2px;
-      background: #eee;
-      flex: 1;
-      max-width: 80px;
+      height: 4px;
+      border-radius: 4px;
+      background: #f1f5f9;
+      width: 72px;
       overflow: hidden;
     }
 
     .conf-bar-fill {
       height: 100%;
-      border-radius: 2px;
-      background: #4f6ef7;
-      transition: width 0.4s;
+      border-radius: 4px;
+      transition: width 0.5s ease;
     }
 
     .conf-label {
       font-size: 10px;
-      color: #bbb;
+      color: #cbd5e1;
+      font-weight: 600;
     }
 
-    /* Warning box */
-    .warning-box {
-      background: #fff8e6;
-      border: 1px solid #f5d87a;
-      border-radius: 8px;
-      padding: 10px 14px;
-      font-size: 12px;
-      color: #7a5c00;
-      margin-bottom: 16px;
-      display: flex;
-      gap: 8px;
-      align-items: flex-start;
-    }
-
-    /* Error box */
-    .error-card {
-      background: #fff2f2;
-      border: 1px solid #ffbebe;
-      border-radius: 14px;
-      padding: 20px 24px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
-      text-align: center;
-    }
-
-    .error-card .error-icon {
-      font-size: 32px;
-      margin-bottom: 8px;
-    }
-
-    .error-card p {
-      font-size: 14px;
-      color: #c0392b;
-      font-weight: 500;
-    }
-
-    .error-card small {
-      font-size: 12px;
-      color: #e07070;
-    }
-
-    /* Processing time */
+    /* ── Result footer ───────────────────────────────────── */
     .meta-row {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       font-size: 11px;
-      color: #bbb;
-      margin-top: 16px;
-      padding-top: 12px;
-      border-top: 1px solid #f0f0f0;
+      color: #cbd5e1;
+      padding: 14px 24px;
+      border-top: 1px solid #f1f5f9;
+      font-weight: 500;
     }
 
-    /* No result */
+    /* ── Warning ─────────────────────────────────────────── */
+    .warning-box {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 12px;
+      color: #92400e;
+      margin-bottom: 14px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      font-weight: 500;
+      animation: fadeUp 0.3s ease;
+    }
+
+    /* ── Error card ──────────────────────────────────────── */
+    .error-card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 32px 24px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.09);
+      text-align: center;
+      animation: fadeUp 0.3s ease;
+    }
+
+    .error-icon {
+      width: 60px;
+      height: 60px;
+      background: #fef2f2;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin: 0 auto 14px;
+    }
+
+    .error-card p {
+      font-size: 15px;
+      font-weight: 700;
+      color: #991b1b;
+      margin-bottom: 6px;
+    }
+
+    .error-card small {
+      font-size: 13px;
+      color: #b91c1c;
+      line-height: 1.5;
+    }
+
+    /* ── No data ─────────────────────────────────────────── */
     .no-data {
       text-align: center;
-      padding: 20px 0 8px;
-      color: #aaa;
-      font-size: 13px;
+      padding: 40px 24px;
+      color: #94a3b8;
+      font-size: 14px;
+      font-weight: 500;
+      line-height: 1.7;
     }
 
+    .no-data-icon {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Card Scanner</h1>
-    <p class="subtitle">Upload or take a photo of a visiting card to extract contact info.</p>
+
+  <!-- Hero header -->
+  <div class="hero">
+    <div class="hero-badge">✦ AI-Powered OCR</div>
+    <h1>📇 Card Scanner</h1>
+    <p>Instantly extract contact details from any visiting card using smart OCR.</p>
+  </div>
+
+  <!-- Main content -->
+  <div class="page-body">
 
     <!-- Upload card -->
-    <div class="upload-card">
+    <div class="card">
 
-      <!-- Drop zone (file upload) -->
+      <!-- Drop zone -->
       <div class="drop-zone" id="drop-zone">
         <input type="file" id="file-input" accept="image/jpeg,image/jpg,image/png,image/webp" />
-        <div class="drop-icon">🖼️</div>
-        <div class="drop-text"><span>Click to upload</span> or drag & drop</div>
-        <div class="drop-hint">JPG, PNG, WEBP — max 5 MB</div>
+        <div class="drop-zone-icon">🖼️</div>
+        <div class="drop-title"><span>Click to upload</span> or drag & drop</div>
+        <div class="drop-sub">JPG, PNG, WEBP — max 5 MB</div>
       </div>
 
-      <!-- Camera option (shows native camera on mobile) -->
+      <!-- Divider -->
       <div class="or-row">or</div>
-      <button class="btn-camera" id="camera-btn" type="button">
-        📷 Take a Photo
-      </button>
-      <input type="file" id="camera-input" accept="image/*" capture="environment"
-             style="display:none" />
 
-      <!-- Preview -->
+      <!-- Camera button -->
+      <button class="btn-camera" id="camera-btn" type="button">
+        📷&nbsp; Use Camera
+      </button>
+      <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none" />
+
+      <!-- Image preview -->
       <div id="preview-wrap">
         <img id="preview-img" src="" alt="Preview" />
-        <button id="remove-btn" title="Remove">✕</button>
+        <button id="remove-btn" title="Remove image">✕</button>
       </div>
       <p id="file-name"></p>
 
       <!-- Scan button -->
       <button class="btn-scan" id="scan-btn" type="button">
         <div class="spinner" id="spinner"></div>
-        <span id="scan-label">Scan Card</span>
+        <span id="scan-label">🔍&nbsp; Scan Card</span>
       </button>
+
     </div>
 
-    <!-- Results -->
+    <!-- Results injected here -->
     <div id="result-section"></div>
+
   </div>
 
   <script>
@@ -540,7 +667,7 @@
     function setLoading(on) {
       scanBtn.disabled = on;
       spinner.style.display = on ? 'block' : 'none';
-      scanLabel.textContent = on ? 'Scanning…' : 'Scan Card';
+      scanLabel.textContent = on ? 'Scanning…' : '🔍  Scan Card';
     }
 
     function showError(title, detail) {
@@ -561,15 +688,15 @@
       const warnings = json.warnings || [];
       const procTime = json.processing_time_ms;
 
-      // Field definitions: [key, label, icon, formatter]
+      // Field definitions: [key, label, icon, iconClass, formatter]
       const fields = [
-        ['name',        'Name',        '👤', v => esc(v)],
-        ['designation', 'Designation', '💼', v => esc(v)],
-        ['company',     'Company',     '🏢', v => esc(v)],
-        ['phone',       'Phone',       '📞', v => formatPhone(v)],
-        ['email',       'Email',       '✉️', v => formatEmail(v)],
-        ['website',     'Website',     '🌐', v => formatWebsite(v)],
-        ['address',     'Address',     '📍', v => esc(v)],
+        ['name',        'Name',        '👤', 'icon-name',        v => esc(v)],
+        ['designation', 'Designation', '💼', 'icon-designation', v => esc(v)],
+        ['company',     'Company',     '🏢', 'icon-company',     v => esc(v)],
+        ['phone',       'Phone',       '📞', 'icon-phone',       v => formatPhone(v)],
+        ['email',       'Email',       '✉️', 'icon-email',       v => formatEmail(v)],
+        ['website',     'Website',     '🌐', 'icon-website',     v => formatWebsite(v)],
+        ['address',     'Address',     '📍', 'icon-address',     v => esc(v)],
       ];
 
       const hasAny = fields.some(([k]) => data[k]);
@@ -578,8 +705,11 @@
         resultSection.style.display = 'block';
         resultSection.innerHTML = `
           <div class="result-card">
-            <div class="no-data">😕 No contact information could be extracted.<br>
-            Try a clearer or higher-resolution image.</div>
+            <div class="no-data">
+              <div class="no-data-icon">😕</div>
+              No contact information could be extracted.<br>
+              Try a clearer or higher-resolution image.
+            </div>
           </div>`;
         return;
       }
@@ -592,7 +722,7 @@
       }
 
       let fieldsHTML = '';
-      for (const [key, label, icon, fmt] of fields) {
+      for (const [key, label, icon, iconClass, fmt] of fields) {
         const value = data[key];
         if (!value) continue;
 
@@ -607,7 +737,7 @@
         let confHTML = '';
         if (fieldConf !== undefined) {
           const pct = Math.round(fieldConf * 100);
-          const color = fieldConf >= 0.8 ? '#4f6ef7' : fieldConf >= 0.6 ? '#f0a500' : '#e74c3c';
+          const color = fieldConf >= 0.8 ? '#3b5bdb' : fieldConf >= 0.6 ? '#f59e0b' : '#ef4444';
           confHTML = `
             <div class="conf-bar-wrap">
               <div class="conf-bar">
@@ -619,7 +749,7 @@
 
         fieldsHTML += `
           <div class="field-row">
-            <div class="field-icon">${icon}</div>
+            <div class="field-icon ${iconClass}">${icon}</div>
             <div class="field-body">
               <div class="field-label">${label}</div>
               <div class="field-value">${displayValue}</div>
@@ -631,19 +761,27 @@
       const overallPct = conf.overall !== undefined ? Math.round(conf.overall * 100) : null;
       const metaHTML = `
         <div class="meta-row">
-          <span>${overallPct !== null ? 'Overall confidence: ' + overallPct + '%' : ''}</span>
-          <span>${procTime !== undefined ? 'Processed in ' + procTime + ' ms' : ''}</span>
+          <span>${overallPct !== null ? '⬤ Overall confidence: ' + overallPct + '%' : ''}</span>
+          <span>${procTime !== undefined ? '⚡ ' + procTime + ' ms' : ''}</span>
         </div>`;
 
       resultSection.style.display = 'block';
       resultSection.innerHTML = `
         ${warningHTML}
         <div class="result-card">
-          <div class="result-header">
-            <span class="result-title">Extracted Info</span>
+          <div class="result-top">
+            <div class="result-top-left">
+              <div class="result-top-icon">📋</div>
+              <div>
+                <div class="result-title">Extracted Info</div>
+                <div class="result-subtitle">Contact details from card</div>
+              </div>
+            </div>
             <span class="badge-success">✓ Success</span>
           </div>
-          ${fieldsHTML}
+          <div class="result-body">
+            ${fieldsHTML}
+          </div>
           ${metaHTML}
         </div>`;
     }
