@@ -6,6 +6,14 @@ import time
 from fastapi import FastAPI, File, UploadFile, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+
+# python-bidi 0.4.x puts get_display in bidi.algorithm, but easyocr 1.7.x
+# expects it at the top-level bidi module. Patch before easyocr imports it.
+import bidi
+import bidi.algorithm
+if not hasattr(bidi, 'get_display'):
+    bidi.get_display = bidi.algorithm.get_display
+
 import easyocr
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
