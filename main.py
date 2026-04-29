@@ -7,14 +7,7 @@ from fastapi import FastAPI, File, UploadFile, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
-# python-bidi 0.4.x puts get_display in bidi.algorithm, but easyocr 1.7.x
-# expects it at the top-level bidi module. Patch before easyocr imports it.
-import bidi
-import bidi.algorithm
-if not hasattr(bidi, 'get_display'):
-    bidi.get_display = bidi.algorithm.get_display
-
-import easyocr
+from paddleocr import PaddleOCR
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 from dotenv import load_dotenv
@@ -31,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-reader = easyocr.Reader(["en"], gpu=False, verbose=False)
+reader = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=False, show_log=False)
 
 VALID_API_KEYS = set(os.getenv("API_KEYS", "test123").split(","))
 MAX_FILE_SIZE = 5 * 1024 * 1024
@@ -59,7 +52,7 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "1.0.0", "ocr_engine": "easyocr"}
+    return {"status": "ok", "version": "1.0.0", "ocr_engine": "paddleocr"}
 
 
 @app.post("/api/v1/ocr")
@@ -89,26 +82,18 @@ async def ocr_scan(
     image_np = np.array(image)
 
     try:
-        results = reader.readtext(
-            image_np,
-            detail=1,
-            paragraph=False,
-            mag_ratio=1.5,
-            text_threshold=0.5,
-            low_text=0.3,
-            link_threshold=0.3,
-        )
+        results = reader.ocr(image_np, cls=True)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OCR failed: {str(e)}")
 
-    lines = [
-        {
+    lines = []
+    for item in (results[0] or []):
+        bbox, (text, confidence) = item
+        lines.append({
             "text": clean_text(text),
             "bbox": [[int(p[0]), int(p[1])] for p in bbox],
             "confidence": round(float(confidence), 4),
-        }
-        for (bbox, text, confidence) in results
-    ]
+        })
 
     overall_confidence = (
         round(sum(l["confidence"] for l in lines) / len(lines), 4) if lines else 0.0
@@ -127,7 +112,7 @@ async def ocr_scan(
         "status": "success",
         "request_id": str(uuid.uuid4()),
         "processing_time_ms": int((time.time() - start) * 1000),
-        "ocr_engine": "easyocr",
+        "ocr_engine": "paddleocr",
         "data": extracted["data"],
         "confidence": {
             "overall": overall_confidence,
