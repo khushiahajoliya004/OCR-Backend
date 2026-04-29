@@ -54,6 +54,10 @@ st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
 
 def preprocess(image: Image.Image) -> Image.Image:
     w, h = image.size
+    if max(w, h) > 2400:
+        s = 2400 / max(w, h)
+        image = image.resize((int(w * s), int(h * s)), Image.LANCZOS)
+        w, h = image.size
     if max(w, h) < 1200:
         s = 1200 / max(w, h)
         image = image.resize((int(w * s), int(h * s)), Image.LANCZOS)
@@ -226,7 +230,7 @@ if uploaded:
     col1, col2 = st.columns([1, 1])
     with col1:
         image = Image.open(uploaded).convert("RGB")
-        st.image(image, width='stretch')
+        st.image(image, use_container_width=True)
     with col2:
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         scan = st.button("🔍  Scan Card", width='stretch')
