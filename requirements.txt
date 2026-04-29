@@ -1,5 +1,4 @@
 streamlit
-easyocr
+pytesseract
 pillow>=10.0.0
 numpy>=1.26.0
-python-bidi==0.4.2
