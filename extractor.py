@@ -21,7 +21,8 @@ COMPANY_RE = re.compile(
     re.IGNORECASE,
 )
 CREDENTIALS_RE = re.compile(
-    r'\b(MD|PhD|Dr\.?|MBA|JD|DDS|RN|DO|MPH|MS|MA|FACS|FACC|FAHA|Prof\.?)\b'
+    r'\b(MD|PhD|Dr\.?|MBA|JD|DDS|RN|DO|MPH|MS|MA|FACS|FACC|FAHA|Prof\.?)\b',
+    re.IGNORECASE,
 )
 PINCODE_RE = re.compile(
     r'\b\d{6}\b'                       # Indian 6-digit PIN
@@ -38,6 +39,7 @@ LABEL_MAP = {
     'address':     re.compile(r'^(?:address|addr|add|location|office)\s*:?\s*', re.IGNORECASE),
     'company':     re.compile(r'^(?:company|co|org|organization|firm)\s*:?\s*', re.IGNORECASE),
     'designation': re.compile(r'^(?:designation|position|title|role)\s*:?\s*', re.IGNORECASE),
+    'social':      re.compile(r'^(?:instagram|twitter|facebook|linkedin|fb|ig|tiktok|snapchat|youtube|x)\s*:?\s*@?\s*', re.IGNORECASE),
 }
 
 # Marketing slogans / taglines — filter from all fields
@@ -91,23 +93,25 @@ MIN_LINE_CONFIDENCE = 0.15
 
 # H. Rule-based confidence per detection method — blended with OCR confidence
 _RULE_CONF = {
-    'phone_intl':          0.95,   # international format (+91, +1 ...)
-    'phone_local':         0.85,   # local digits only
-    'email_exact':         0.95,   # clean regex match
-    'email_fixed':         0.80,   # OCR artifact corrected (missing dot etc.)
-    'website_www':         0.95,   # explicit www. prefix
-    'website_domain':      0.85,   # bare domain pattern
-    'name_credential':     0.95,   # MD / PhD / Dr suffix present
-    'name_top_zone':       0.85,   # top 35 % of card
-    'name_fallback':       0.70,   # position heuristic only
-    'company_label':       0.98,   # explicit "Company:" label
-    'company_at_logo':     0.85,   # @brand detection
-    'company_keyword':     0.88,   # COMPANY_RE keyword (Pvt, Ltd ...)
-    'company_prominence':  0.75,   # large-font heuristic
-    'designation_keyword': 0.82,   # DESIGNATION_KEYWORDS match
-    'address_pattern':     0.88,   # ADDRESS_PATTERNS match
-    'address_label':       0.95,   # explicit "Address:" label
-    'address_fallback':    0.65,   # catch-all remaining lines
+    'phone_intl':               0.95,   # international format (+91, +1 ...)
+    'phone_local':              0.85,   # local digits only
+    'email_exact':              0.95,   # clean regex match
+    'email_fixed':              0.80,   # OCR artifact corrected (missing dot etc.)
+    'website_www':              0.95,   # explicit www. prefix
+    'website_domain':           0.85,   # bare domain pattern
+    'name_credential':          0.95,   # MD / PhD / Dr suffix present
+    'name_top_zone':            0.85,   # top 35 % of card
+    'name_fallback':            0.70,   # position heuristic only
+    'company_label':            0.98,   # explicit "Company:" label
+    'company_at_logo':          0.85,   # @brand detection
+    'company_keyword':          0.88,   # COMPANY_RE keyword (Pvt, Ltd ...)
+    'company_prominence':       0.75,   # large-font heuristic
+    'company_email_domain':     0.65,   # inferred from email domain
+    'company_website_domain':   0.60,   # inferred from website domain
+    'designation_keyword':      0.82,   # DESIGNATION_KEYWORDS match
+    'address_pattern':          0.88,   # ADDRESS_PATTERNS match
+    'address_label':            0.95,   # explicit "Address:" label
+    'address_fallback':         0.65,   # catch-all remaining lines
 }
 
 
@@ -127,6 +131,8 @@ def _strip_icon(text: str) -> str:
 def _fix_url(text: str) -> str:
     text = re.sub(r'https?\s*:\s*/\s*/', 'http://', text, flags=re.IGNORECASE)
     text = re.sub(r'(\w),(\w{2,6})\b', r'\1.\2', text)
+    # Fix OCR space after "www. ": "www. domain.com" → "www.domain.com"
+    text = re.sub(r'\bwww\.\s+', 'www.', text, flags=re.IGNORECASE)
     # OCR sometimes drops dots: "wwwdomaincom" → "www.domain.com"
     text = re.sub(
         r'^(www)([a-zA-Z0-9\-]+?)(com|net|org|in|co|io|biz|info|edu|gov)$',
@@ -136,12 +142,40 @@ def _fix_url(text: str) -> str:
 
 
 def _fix_email(text: str) -> str:
+    # Fix OCR space after dot in local part: "name. surname@" → "name.surname@"
+    text = re.sub(r'(\w)\.\s+(\w)', r'\1.\2', text)
+    # Fix OCR space replacing dot before @: "harmish trivedi@" → "harmish.trivedi@"
+    # Only when both sides are ≥2 chars — avoids matching random "word label@" phrases
+    text = re.sub(r'(\w{2,})\s+(\w{2,}@)', r'\1.\2', text)
     text = re.sub(r'\s*@\s*', '@', text)
     text = re.sub(
         r'(@[a-zA-Z0-9\-]+)(com|net|org|io|co|in|biz|info|edu|gov)$',
         r'\1.\2', text, flags=re.IGNORECASE
     )
     return text
+
+
+def _scan_remainder(text: str, conf: float, emails: list, websites: list, phones: list) -> None:
+    """Extract any additional fields hiding in leftover text on the same OCR line."""
+    if not text.strip():
+        return
+    # Website
+    url_t = _fix_url(text)
+    ws_m = WEBSITE_RE.search(url_t)
+    if ws_m and '@' not in url_t:
+        w_method = 'website_www' if 'www.' in url_t.lower() else 'website_domain'
+        websites.append({'text': ws_m.group().lower(), 'confidence': conf, 'method': w_method})
+        text = text[:url_t.find(ws_m.group())] + text[url_t.find(ws_m.group()) + len(ws_m.group()):]
+    # Email
+    em_t = _fix_email(text)
+    em_m = EMAIL_RE.search(em_t)
+    if em_m:
+        emails.append({'text': em_m.group().lower(), 'confidence': conf, 'method': 'email_exact'})
+        text = text[:em_t.find(em_m.group())] + text[em_t.find(em_m.group()) + len(em_m.group()):]
+    # Phone
+    for ph in _extract_phones(text):
+        method = 'phone_intl' if re.search(r'\+?\d{1,3}[\s\-]', text) else 'phone_local'
+        phones.append({'text': ph, 'confidence': conf, 'method': method})
 
 
 def _extract_phones(text: str) -> list[str]:
@@ -157,11 +191,16 @@ def _extract_phones(text: str) -> list[str]:
 def _extract_name_from_credentials(text: str) -> str | None:
     if not CREDENTIALS_RE.search(text):
         return None
-    name = CREDENTIALS_RE.sub('', text)
-    name = re.sub(r'[,\s]+', ' ', name).strip().strip(',').strip()
-    if len(name) >= 3 and re.match(r'^[A-Za-z\s\.\-]+$', name):
-        return name
-    return None
+    # Validate that removing credentials leaves a real person name
+    name_only = CREDENTIALS_RE.sub('', text)
+    name_only = re.sub(r'[,\s]+', ' ', name_only).strip().strip(',').strip()
+    if len(name_only) < 3 or not re.match(r'^[A-Za-z\s\.\-]+$', name_only):
+        return None
+    # Return the full name WITH credentials, comma-spacing normalised
+    # "Joseph C. Wu,MD,PhD" → "Joseph C. Wu, MD, PhD"
+    full = re.sub(r'\s*,\s*', ', ', text.strip())
+    full = re.sub(r'\s+', ' ', full).strip().strip(',').strip()
+    return full
 
 
 def is_noise(text: str, confidence: float = 1.0) -> bool:
@@ -203,6 +242,10 @@ def _is_proper_name(text: str) -> bool:
     # Reject if any word is a known non-name filler (preposition, product noun)
     if any(w.lower() in _NAME_WORD_STOP for w in words):
         return False
+    # Single ALL-CAPS word longer than 3 chars is a brand/logo name, not a person name
+    # (e.g. "VOLUME", "ANDOVER" — person names appear as "Rahi", not "RAHI")
+    if len(words) == 1 and words[0].isupper() and len(words[0]) > 3:
+        return False
     cap_count = sum(1 for w in words if w[0].isupper())
     # Allow at most one non-capitalised word (particles: "de", "van", "al")
     return cap_count >= max(1, len(words) - 1)
@@ -226,6 +269,88 @@ def _is_vertically_adjacent(line1: dict, line2: dict) -> bool:
 
 def _has_pincode(text: str) -> bool:
     return bool(PINCODE_RE.search(text))
+
+
+_GENERIC_EMAIL_DOMAINS = frozenset({
+    'gmail', 'yahoo', 'hotmail', 'outlook', 'icloud', 'rediffmail',
+    'ymail', 'protonmail', 'live', 'msn', 'aol', 'mail',
+})
+
+_GENERIC_WEBSITE_DOMAINS = frozenset({
+    'gmail', 'yahoo', 'google', 'facebook', 'instagram', 'twitter',
+    'linkedin', 'whatsapp', 'youtube', 'amazon', 'flipkart',
+})
+
+
+def _dedupe_emails(entries: list) -> list:
+    """Remove duplicate email entries, keeping the first occurrence (case-insensitive)."""
+    seen: set[str] = set()
+    result = []
+    for e in entries:
+        key = e['text'].lower()
+        if key not in seen:
+            seen.add(key)
+            result.append(e)
+    return result
+
+
+def _dedupe_websites(entries: list) -> list:
+    """Remove duplicate website entries.
+
+    Deduplication key is the bare domain (strip www., http://, trailing slash).
+    When two entries map to the same domain, keep the one with the www. prefix
+    (more complete), or the first one if neither has it.
+    """
+    def _domain_key(url: str) -> str:
+        url = url.lower()
+        url = re.sub(r'^https?://', '', url)
+        url = re.sub(r'^www\.', '', url)
+        return url.rstrip('/')
+
+    seen: dict[str, int] = {}   # domain_key → index in result
+    result = []
+    for e in entries:
+        key = _domain_key(e['text'])
+        if key in seen:
+            existing = result[seen[key]]
+            # Prefer the entry that starts with www.
+            if e['text'].startswith('www.') and not existing['text'].startswith('www.'):
+                result[seen[key]] = e
+        else:
+            seen[key] = len(result)
+            result.append(e)
+    return result
+
+
+def _company_from_email(email: str) -> str | None:
+    """Infer company name from the email domain (skips generic providers)."""
+    m = re.search(r'@([\w\-]+)\.', email)
+    if not m:
+        return None
+    domain = m.group(1).lower()
+    if domain in _GENERIC_EMAIL_DOMAINS:
+        return None
+    # CamelCase domains like "lumoslogic" → "Lumoslogic" (best we can do without spaces)
+    return domain.title()
+
+
+def _company_from_website(url: str) -> str | None:
+    """Infer company name from the website URL (skips generic sites)."""
+    # strip protocol and www.
+    domain = re.sub(r'^https?://', '', url, flags=re.IGNORECASE)
+    domain = re.sub(r'^www\.', '', domain, flags=re.IGNORECASE)
+    # remove path and query string
+    domain = domain.split('/')[0].split('?')[0]
+    # remove TLD(s): .co.in, .com, .net, .org, .in, .biz, .info ...
+    domain = re.sub(
+        r'\.(com|net|org|in|co\.in|co\.uk|biz|info|edu|gov|io|agency|site|online).*$',
+        '', domain, flags=re.IGNORECASE
+    )
+    if len(domain) < 2:
+        return None
+    if domain.lower() in _GENERIC_WEBSITE_DOMAINS:
+        return None
+    return domain.title()
 
 
 def _field_confidence(entries: list) -> float | None:
@@ -311,16 +436,25 @@ def extract_fields(lines: list) -> dict:
                 break
 
         if matched_label and label_value:
+            if matched_label == 'social':
+                # Instagram/Twitter/LinkedIn handles are not business contact fields
+                used.add(i); continue
             if matched_label == 'email':
                 fixed = _fix_email(label_value)
-                if EMAIL_RE.search(fixed):
+                em_m = EMAIL_RE.search(fixed)
+                if em_m:
                     method = 'email_fixed' if fixed != label_value else 'email_exact'
-                    emails.append({'text': EMAIL_RE.search(fixed).group().lower(), 'confidence': conf, 'method': method})
+                    emails.append({'text': em_m.group().lower(), 'confidence': conf, 'method': method})
+                    # Scan the rest of this line — OCR sometimes merges multiple labels into one block
+                    remainder = fixed[fixed.find(em_m.group()) + len(em_m.group()):]
+                    _scan_remainder(remainder, conf, emails, websites, phones)
                     used.add(i); continue
             if matched_label in ('phone', 'fax'):
                 method = 'phone_intl' if re.search(r'^\+?\d{1,3}[\s\-]', label_value) else 'phone_local'
                 for ph in _extract_phones(label_value):
                     phones.append({'text': ph, 'confidence': conf, 'method': method})
+                # Scan remainder for email/website merged on the same OCR line
+                _scan_remainder(PHONE_RE.sub('', label_value), conf, emails, websites, phones)
                 used.add(i); continue
             if matched_label == 'website':
                 fixed = _fix_url(label_value)
@@ -344,9 +478,15 @@ def extract_fields(lines: list) -> dict:
         if not text:
             used.add(i); continue
 
-        # @word → company (logo text detection)
+        # @word → company (logo/brand handle), but skip if the previous OCR line was a social label
         if re.match(r'^@\w+$', text) and conf >= MIN_LINE_CONFIDENCE:
-            companies.append({'text': text.lstrip('@'), 'confidence': conf, 'method': 'company_at_logo'})
+            prev_raw = clean_text(lines[i - 1]['text']) if i > 0 else ''
+            is_social_handle = bool(
+                LABEL_MAP['social'].search(prev_raw)          # previous line had "Instagram:" etc.
+                or LABEL_MAP['social'].match(text.lstrip('@'))  # the handle word itself is a platform name
+            )
+            if not is_social_handle:
+                companies.append({'text': text.lstrip('@'), 'confidence': conf, 'method': 'company_at_logo'})
             used.add(i); continue
 
         if is_noise(text, conf):
@@ -359,17 +499,69 @@ def extract_fields(lines: list) -> dict:
 
         # B. Email
         email_text = _fix_email(text)
-        if EMAIL_RE.search(email_text):
+        em_match = EMAIL_RE.search(email_text)
+        if em_match:
+            detected_email = em_match.group().lower()
+
+            # Recover orphaned local-part prefix that OCR split into a separate box.
+            # EasyOCR sometimes cuts "harmish.trivedi@..." into:
+            #   box(i-1) = "harmish."  →  clean_text strips the dot → "harmish"
+            #   box(i)   = "trivedi@lumoslogic.com"
+            # We look one box back: if it's on the same row, purely word-like,
+            # and not already claimed, prepend it with a dot.
+            curr_bbox   = line['bbox']
+            curr_left_x = curr_bbox[0][0]
+            curr_height = max(curr_bbox[2][1] - curr_bbox[0][1], 1)
+            # Spatial search for orphaned local-part prefix — do NOT rely on sequential
+            # index order (OCR box ordering is unpredictable when columns interleave).
+            # Find the unused box that:
+            #   1. is on the same row
+            #   2. ends closest to where the email box starts (horizontally adjacent)
+            #   3. gap < 3× line height  (adjacent, not across the card)
+            best_gap    = float('inf')
+            best_idx    = None
+            best_prefix = None
+            for j, candidate_line in enumerate(lines):
+                if j == i or j in used:
+                    continue
+                cb = candidate_line['bbox']
+                right_x = cb[1][0]
+                gap     = abs(curr_left_x - right_x)
+                if (gap < curr_height * 3
+                        and right_x <= curr_left_x + curr_height   # must be to the left
+                        and _same_row(cb, curr_bbox)
+                        and gap < best_gap):
+                    pc = clean_text(_strip_icon(candidate_line['text']))
+                    if (re.match(r'^[a-zA-Z0-9][a-zA-Z0-9._+%-]*$', pc)
+                            and not EMAIL_RE.search(pc)):
+                        candidate_email = (pc.rstrip('.') + '.' + detected_email)
+                        if EMAIL_RE.fullmatch(candidate_email):
+                            best_gap    = gap
+                            best_idx    = j
+                            best_prefix = candidate_email
+            if best_prefix:
+                detected_email = best_prefix
+                used.add(best_idx)
+
             method = 'email_fixed' if email_text != text else 'email_exact'
-            emails.append({'text': EMAIL_RE.search(email_text).group().lower(), 'confidence': conf, 'method': method})
+            emails.append({'text': detected_email, 'confidence': conf, 'method': method})
+            remainder = email_text[email_text.find(em_match.group()) + len(em_match.group()):]
+            _scan_remainder(remainder, conf, emails, websites, phones)
             used.add(i); continue
 
         # C. Website
         url_text = _fix_url(text)
         ws_match = WEBSITE_RE.search(url_text)
         if ws_match and '@' not in url_text:
-            method = 'website_www' if 'www.' in url_text.lower() else 'website_domain'
-            websites.append({'text': ws_match.group().lower(), 'confidence': conf, 'method': method})
+            matched_url = ws_match.group().lower()
+            # If OCR split "www." into a previous line and this line is just the bare domain,
+            # check if the previous OCR line was exactly "www." and prepend it.
+            if not matched_url.startswith(('www.', 'http://', 'https://')):
+                prev_text = clean_text(lines[i - 1]['text']).lower().strip() if i > 0 else ''
+                if re.fullmatch(r'www\.?', prev_text):
+                    matched_url = 'www.' + matched_url
+            method = 'website_www' if matched_url.startswith('www.') or 'http' in matched_url else 'website_domain'
+            websites.append({'text': matched_url, 'confidence': conf, 'method': method})
             used.add(i); continue
 
         # A. Phone
@@ -429,11 +621,45 @@ def extract_fields(lines: list) -> dict:
                 comp_text = ' '.join(
                     clean_text(_strip_icon(l['text'])) for _, l in cluster
                 )
+                # Strip leading logo-artifact fragments: short tokens with non-alpha chars
+                # e.g. "E' Aishwaryam" → "Aishwaryam"  |  "F2 BrandName" → "BrandName"
+                comp_words = comp_text.split()
+                while comp_words and (
+                    len(comp_words[0]) <= 2
+                    or re.search(r"['\"`~^]", comp_words[0])
+                    or (len(comp_words[0]) <= 3 and not comp_words[0].isalpha())
+                ):
+                    comp_words.pop(0)
+                comp_text = ' '.join(comp_words) if comp_words else comp_text
                 comp_conf = sum(l['confidence'] for _, l in cluster) / len(cluster)
                 if comp_text and len(comp_text) >= 2:
                     companies.append({'text': comp_text, 'confidence': round(comp_conf, 4), 'method': 'company_prominence'})
                     for idx, _ in cluster:
                         used.add(idx)
+
+    # Fallback: infer company from email domain when OCR found nothing
+    if not companies:
+        for e in emails:
+            inferred = _company_from_email(e['text'])
+            if inferred:
+                companies.append({
+                    'text': inferred,
+                    'confidence': e['confidence'],
+                    'method': 'company_email_domain',
+                })
+                break
+
+    # Fallback: infer company from website domain when still nothing
+    if not companies:
+        for w in websites:
+            inferred = _company_from_website(w['text'])
+            if inferred:
+                companies.append({
+                    'text': inferred,
+                    'confidence': w['confidence'],
+                    'method': 'company_website_domain',
+                })
+                break
 
     # E. Company heuristic: longest matching line wins
     if len(companies) > 1:
@@ -447,6 +673,32 @@ def extract_fields(lines: list) -> dict:
             continue
         text = clean_text(_strip_icon(line['text']))
         extracted = _extract_name_from_credentials(text)
+
+        # If credentials are present but name_only is too short (e.g. "Wu" from "Wu, MD, PhD"),
+        # OCR likely split the full name across two boxes — look for an adjacent proper-name
+        # prefix line ("Joseph C.") and combine before retrying extraction.
+        if extracted is None and CREDENTIALS_RE.search(text):
+            for j, prefix_line in enumerate(lines):
+                if j == i or j in used:
+                    continue
+                prefix_text = clean_text(_strip_icon(prefix_line['text']))
+                if not (NAME_RE.match(prefix_text)
+                        and _is_proper_name(prefix_text)
+                        and prefix_text.lower() not in NAME_STOPLIST):
+                    continue
+                prefix_above = prefix_line['bbox'][2][1] <= line['bbox'][0][1] + _line_height(line) * 0.5
+                spatially_close = (
+                    _same_row(prefix_line['bbox'], line['bbox'])
+                    or (prefix_above and _is_vertically_adjacent(prefix_line, line))
+                )
+                if not spatially_close:
+                    continue
+                combined = prefix_text + ' ' + text
+                extracted = _extract_name_from_credentials(combined)
+                if extracted:
+                    used.add(j)
+                    break
+
         if extracted and extracted.lower() not in NAME_STOPLIST:
             name_candidate = {'text': extracted, 'confidence': line['confidence'], 'bbox': line['bbox'], 'method': 'name_credential'}
             used.add(i)
@@ -549,9 +801,11 @@ def extract_fields(lines: list) -> dict:
     if address_lines:
         record('address', _field_confidence(address_lines))
 
+    emails   = _dedupe_emails(emails)
+    websites = _dedupe_websites(websites)
+
     merged_address = _merge_address(address_lines)
     designation_text = ' | '.join(d['text'] for d in designations) if designations else None
-    website_list = [w['text'] for w in websites] if websites else None
 
     raw_data = {
         'name':        name_candidate['text'] if name_candidate else None,
@@ -559,10 +813,13 @@ def extract_fields(lines: list) -> dict:
         'company':     companies[0]['text'] if companies else None,
         'phone':       [p['text'] for p in phones] or None,
         'email':       [e['text'] for e in emails] or None,
-        'website':     website_list,
+        'website':     [w['text'] for w in websites] or None,
         'address':     merged_address if merged_address else None,
     }
 
+    # Only include fields that were actually detected.
+    # null is reserved for fields flagged in low_confidence_fields
+    # (detected but below confidence threshold).
     data = {k: v for k, v in raw_data.items() if v is not None}
 
     return {
