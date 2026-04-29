@@ -82,7 +82,7 @@ async def ocr_scan(
     image_np = np.array(image)
 
     try:
-        results = reader.ocr(image_np, cls=True)
+        results = reader.ocr(image_np)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OCR failed: {str(e)}")
 
