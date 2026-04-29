@@ -24,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-reader = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=False, show_log=False)
+reader = PaddleOCR(lang="en", device="cpu")
 
 VALID_API_KEYS = set(os.getenv("API_KEYS", "test123").split(","))
 MAX_FILE_SIZE = 5 * 1024 * 1024
@@ -87,13 +87,27 @@ async def ocr_scan(
         raise HTTPException(status_code=500, detail=f"OCR failed: {str(e)}")
 
     lines = []
-    for item in (results[0] or []):
-        bbox, (text, confidence) = item
-        lines.append({
-            "text": clean_text(text),
-            "bbox": [[int(p[0]), int(p[1])] for p in bbox],
-            "confidence": round(float(confidence), 4),
-        })
+    raw = results[0] if results else []
+    for item in (raw or []):
+        try:
+            if isinstance(item, (list, tuple)) and len(item) == 2:
+                bbox, text_conf = item
+                text, confidence = text_conf if isinstance(text_conf, (list, tuple)) else (text_conf, 1.0)
+            elif hasattr(item, "rec_text"):
+                text, confidence, bbox = item.rec_text, item.rec_score, item.points
+            elif isinstance(item, dict):
+                text = item.get("rec_text", item.get("transcription", ""))
+                confidence = item.get("rec_score", item.get("score", 1.0))
+                bbox = item.get("points", item.get("bbox", []))
+            else:
+                continue
+            lines.append({
+                "text": clean_text(str(text)),
+                "bbox": [[int(p[0]), int(p[1])] for p in bbox],
+                "confidence": round(float(confidence), 4),
+            })
+        except Exception:
+            continue
 
     overall_confidence = (
         round(sum(l["confidence"] for l in lines) / len(lines), 4) if lines else 0.0
