@@ -1,10 +1,8 @@
-import os
-import sys
+import io
 import time
+import requests
 import streamlit as st
-from PIL import Image, ImageEnhance, ImageFilter
-
-sys.path.insert(0, os.path.dirname(__file__))
+from PIL import Image
 
 st.set_page_config(page_title="Card Scanner — OCR", page_icon="📇", layout="centered")
 
@@ -52,56 +50,30 @@ st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def preprocess(image: Image.Image) -> Image.Image:
+def call_ocr_api(image: Image.Image) -> dict:
+    api_url = st.secrets["OCR_API_URL"]
+    api_key = st.secrets["OCR_API_KEY"]
+
     w, h = image.size
     if max(w, h) > 2400:
         s = 2400 / max(w, h)
         image = image.resize((int(w * s), int(h * s)), Image.LANCZOS)
-        w, h = image.size
-    if max(w, h) < 1200:
-        s = 1200 / max(w, h)
-        image = image.resize((int(w * s), int(h * s)), Image.LANCZOS)
-    g = image.convert("L")
-    g = ImageEnhance.Contrast(g).enhance(2.0)
-    g = ImageEnhance.Sharpness(g).enhance(2.0)
-    g = g.filter(ImageFilter.SHARPEN)
-    return g.convert("RGB")
 
+    buf = io.BytesIO()
+    image.save(buf, format="JPEG", quality=92)
+    buf.seek(0)
 
-def tesseract_lines(image: Image.Image) -> list:
-    import pytesseract
-    from pytesseract import Output
-    d = pytesseract.image_to_data(image, output_type=Output.DICT)
-    groups: dict = {}
-    for i in range(len(d["text"])):
-        word = d["text"][i].strip()
-        conf = float(d["conf"][i])
-        if conf < 0 or not word:
-            continue
-        key = (d["block_num"][i], d["par_num"][i], d["line_num"][i])
-        if key not in groups:
-            groups[key] = {
-                "words": [], "confs": [],
-                "l": d["left"][i], "t": d["top"][i],
-                "r": d["left"][i] + d["width"][i],
-                "b": d["top"][i]  + d["height"][i],
-            }
-        g = groups[key]
-        g["words"].append(word)
-        g["confs"].append(conf)
-        g["r"] = max(g["r"], d["left"][i] + d["width"][i])
-        g["b"] = max(g["b"], d["top"][i]  + d["height"][i])
-        g["l"] = min(g["l"], d["left"][i])
-        g["t"] = min(g["t"], d["top"][i])
-    lines = []
-    for key in sorted(groups):
-        g = groups[key]
-        conf = round(sum(g["confs"]) / len(g["confs"]) / 100, 4)
-        l, t, r, b = g["l"], g["t"], g["r"], g["b"]
-        lines.append({"text": " ".join(g["words"]),
-                      "bbox": [[l,t],[r,t],[r,b],[l,b]],
-                      "confidence": conf})
-    return lines
+    resp = requests.post(
+        api_url,
+        headers={"x-api-key": api_key},
+        files={"file": ("card.jpg", buf, "image/jpeg")},
+        timeout=90,
+    )
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"API returned {resp.status_code}: {resp.text}")
+
+    return resp.json()
 
 
 def build_result_html(result: dict, proc_ms: int, overall: float) -> str:
@@ -236,19 +208,16 @@ if uploaded:
         scan = st.button("🔍  Scan Card", width='stretch')
 
     if scan:
-        with st.spinner("Running OCR…"):
-            t0 = time.time()
-            lines = tesseract_lines(preprocess(image))
-            from extractor import extract_fields
-            result = extract_fields(lines)
-            proc_ms = int((time.time() - t0) * 1000)
-
-        overall = sum(l["confidence"] for l in lines) / len(lines) if lines else 0.0
-        html_doc = build_result_html(result, proc_ms, overall)
-
-        # Count detected fields to size the iframe height
-        n_fields = len(result["data"])
-        height = 120 + n_fields * 80 + 60  # header + fields + footer
-
-        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-        st.html(html_doc)
+        with st.spinner("Scanning card…"):
+            try:
+                resp = call_ocr_api(image)
+                proc_ms = resp.get("processing_time_ms", 0)
+                result = {"data": resp["data"], "confidence": resp["confidence"]}
+                overall = resp["confidence"].get("overall", 0.0)
+                html_doc = build_result_html(result, proc_ms, overall)
+                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+                st.html(html_doc)
+                for w in resp.get("warnings", []):
+                    st.warning(w)
+            except Exception as e:
+                st.error(f"Scan failed: {e}")
