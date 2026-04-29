@@ -2,7 +2,6 @@ import os
 import sys
 import time
 import streamlit as st
-import streamlit.components.v1 as components
 from PIL import Image, ImageEnhance, ImageFilter
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -227,10 +226,10 @@ if uploaded:
     col1, col2 = st.columns([1, 1])
     with col1:
         image = Image.open(uploaded).convert("RGB")
-        st.image(image, use_container_width=True)
+        st.image(image, width='stretch')
     with col2:
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        scan = st.button("🔍  Scan Card", use_container_width=True)
+        scan = st.button("🔍  Scan Card", width='stretch')
 
     if scan:
         with st.spinner("Running OCR…"):
@@ -248,4 +247,4 @@ if uploaded:
         height = 120 + n_fields * 80 + 60  # header + fields + footer
 
         st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-        components.html(html_doc, height=height, scrolling=False)
+        st.html(html_doc)
