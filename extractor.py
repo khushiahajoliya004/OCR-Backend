@@ -246,6 +246,10 @@ def _is_proper_name(text: str) -> bool:
     # (e.g. "VOLUME", "ANDOVER" — person names appear as "Rahi", not "RAHI")
     if len(words) == 1 and words[0].isupper() and len(words[0]) > 3:
         return False
+    # Multi-word all-caps phrases are slogans/taglines (e.g. "WHAT YOU CARRY MATTERS")
+    # Person names in all-caps have at most 2 words (e.g. "RAHI PAREKH")
+    if len(words) > 2 and all(w.isupper() for w in words if w.isalpha()):
+        return False
     cap_count = sum(1 for w in words if w[0].isupper())
     # Allow at most one non-capitalised word (particles: "de", "van", "al")
     return cap_count >= max(1, len(words) - 1)
