@@ -822,322 +822,47 @@
 
     let selectedFile = null;
 
-    // ── File selection helpers ─────────────────────────────────────────────
-
-    function setFile(file) {
-      if (!file) return;
-      selectedFile = file;
-      const url = URL.createObjectURL(file);
-      previewImg.src = url;
-      previewWrap.style.display = 'block';
-      fileNameEl.textContent = file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB)';
-      resultSection.style.display = 'none';
-      resultSection.innerHTML = '';
-    }
-
-    function clearFile() {
-      selectedFile = null;
-      fileInput.value = '';
-      cameraInput.value = '';
-      previewImg.src = '';
-      previewWrap.style.display = 'none';
-      fileNameEl.textContent = '';
-      resultSection.style.display = 'none';
-      resultSection.innerHTML = '';
-    }
-
-    fileInput.addEventListener('change', () => {
-      if (fileInput.files[0]) setFile(fileInput.files[0]);
-    });
-
-    // ── Camera modal logic ─────────────────────────────────────────────────
-    const camOverlay  = document.getElementById('cam-overlay');
-    const camClose    = document.getElementById('cam-close');
-    const camVideo    = document.getElementById('cam-video');
-    const camCanvas   = document.getElementById('cam-canvas');
-    const camFlash    = document.getElementById('cam-flash');
-    const camLoading  = document.getElementById('cam-loading');
-    const camStatus   = document.getElementById('cam-status');
-    const btnCapture  = document.getElementById('btn-capture');
-    const btnFlip     = document.getElementById('btn-flip');
-
-    let camStream = null;
-    let facingMode = 'environment'; // rear camera first; flip to 'user' for front
-
-    async function startCamera() {
-      camLoading.style.display = 'flex';
-      camVideo.style.display = 'none';
-      camStatus.style.display = 'none';
-
-      // Stop any existing stream
-      if (camStream) camStream.getTracks().forEach(t => t.stop());
-
+    // ── Connection prewarming for faster requests ──────────────────────────
+    (async function prewarmConnection() {
       try {
-        camStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode, width: { ideal: 1280 }, height: { ideal: 960 } },
-          audio: false,
+        await fetch(API_URL.replace('/ocr', '/health'), { 
+          method: 'GET',
+          headers: { 'x-api-key': API_KEY }
         });
-        camVideo.srcObject = camStream;
-        camVideo.onloadedmetadata = () => {
-          camLoading.style.display = 'none';
-          camVideo.style.display = 'block';
-          camStatus.style.display = 'block';
-        };
-      } catch (err) {
-        camLoading.innerHTML = '❌ Camera access denied.<br><small>Allow camera permission and try again.</small>';
+      } catch (e) {
+        // Ignore errors, just trying to establish connection
       }
-    }
+    })();
 
-    function stopCamera() {
-      if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
-    }
-
-    function openCamModal() {
-      camOverlay.classList.add('open');
-      document.body.style.overflow = 'hidden';
-      startCamera();
-    }
-
-    function closeCamModal() {
-      stopCamera();
-      camOverlay.classList.remove('open');
-      document.body.style.overflow = '';
-    }
-
-    cameraBtn.addEventListener('click', openCamModal);
-    camClose.addEventListener('click', closeCamModal);
-    camOverlay.addEventListener('click', e => { if (e.target === camOverlay) closeCamModal(); });
-
-    // Flip between front / rear camera
-    btnFlip.addEventListener('click', () => {
-      facingMode = facingMode === 'environment' ? 'user' : 'environment';
-      startCamera();
-    });
-
-    // Capture photo
-    btnCapture.addEventListener('click', () => {
-      if (!camStream) return;
-
-      // Flash effect
-      camFlash.classList.remove('go');
-      void camFlash.offsetWidth; // reflow
-      camFlash.classList.add('go');
-
-      const vw = camVideo.videoWidth;
-      const vh = camVideo.videoHeight;
-      camCanvas.width  = vw;
-      camCanvas.height = vh;
-      camCanvas.getContext('2d').drawImage(camVideo, 0, 0, vw, vh);
-
-      camCanvas.toBlob(blob => {
-        if (!blob) return;
-        const file = new File([blob], 'camera-capture.jpg', { type: 'image/jpeg' });
-        closeCamModal();
-        setFile(file);
-      }, 'image/jpeg', 0.92);
-    });
-
-    // Mobile fallback — if getUserMedia unavailable, fall back to file input capture
-    cameraInput.addEventListener('change', () => {
-      if (cameraInput.files[0]) setFile(cameraInput.files[0]);
-    });
-
-    removeBtn.addEventListener('click', clearFile);
-
-    // Drag & drop
-    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
-    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-    dropZone.addEventListener('drop', e => {
-      e.preventDefault();
-      dropZone.classList.remove('dragover');
-      const file = e.dataTransfer.files[0];
-      if (file) setFile(file);
-    });
-
-    // ── Scan ───────────────────────────────────────────────────────────────
-
-    scanBtn.addEventListener('click', async () => {
-      if (!selectedFile) {
-        showError('No file selected', 'Please upload or take a photo first.');
-        return;
-      }
-
-      setLoading(true);
-
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-
-      try {
-        const res = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'x-api-key': API_KEY },
-          body: formData,
-        });
-
-        const json = await res.json();
-
-        if (!res.ok) {
-          const msg = json.detail || json.message || 'API error';
-          showError('Request failed (' + res.status + ')', msg);
-          return;
-        }
-
-        showResult(json);
-
-      } catch (err) {
-        showError('Connection failed', 'Could not reach the API. Make sure the backend is running on port 8000.');
-      } finally {
-        setLoading(false);
-      }
-    });
-
-    // ── UI states ──────────────────────────────────────────────────────────
-
-    function setLoading(on) {
-      scanBtn.disabled = on;
-      spinner.style.display = on ? 'block' : 'none';
-      scanLabel.textContent = on ? 'Scanning…' : '🔍  Scan Card';
-    }
-
-    function showError(title, detail) {
-      resultSection.style.display = 'block';
-      resultSection.innerHTML = `
-        <div class="error-card">
-          <div class="error-icon">⚠️</div>
-          <p>${esc(title)}</p>
-          <small>${esc(detail)}</small>
-        </div>`;
-    }
-
-    // ── Result rendering ───────────────────────────────────────────────────
-
-    function showResult(json) {
-      const data = json.data || {};
-      const conf = json.confidence || {};
-      const warnings = json.warnings || [];
-      const procTime = json.processing_time_ms;
-
-      // Field definitions: [key, label, icon, iconClass, formatter]
-      const fields = [
-        ['name',        'Name',        '👤', 'icon-name',        v => esc(v)],
-        ['designation', 'Designation', '💼', 'icon-designation', v => esc(v)],
-        ['company',     'Company',     '🏢', 'icon-company',     v => esc(v)],
-        ['phone',       'Phone',       '📞', 'icon-phone',       v => formatPhone(v)],
-        ['email',       'Email',       '✉️', 'icon-email',       v => formatEmail(v)],
-        ['website',     'Website',     '🌐', 'icon-website',     v => formatWebsite(v)],
-        ['address',     'Address',     '📍', 'icon-address',     v => esc(v)],
-      ];
-
-      const hasAny = fields.some(([k]) => data[k]);
-
-      if (!hasAny) {
-        resultSection.style.display = 'block';
-        resultSection.innerHTML = `
-          <div class="result-card">
-            <div class="no-data">
-              <div class="no-data-icon">😕</div>
-              No contact information could be extracted.<br>
-              Try a clearer or higher-resolution image.
-            </div>
-          </div>`;
-        return;
-      }
-
-      let warningHTML = '';
-      if (warnings.length) {
-        warningHTML = warnings.map(w =>
-          `<div class="warning-box">⚠️ <span>${esc(w)}</span></div>`
-        ).join('');
-      }
-
-      let fieldsHTML = '';
-      for (const [key, label, icon, iconClass, fmt] of fields) {
-        const value = data[key];
-        if (!value) continue;
-
-        let displayValue;
-        if (Array.isArray(value)) {
-          displayValue = value.map(fmt).join('<br>');
-        } else {
-          displayValue = fmt(value);
-        }
-
-        const fieldConf = conf[key];
-        let confHTML = '';
-        if (fieldConf !== undefined) {
-          const pct = Math.round(fieldConf * 100);
-          const color = fieldConf >= 0.8 ? '#3b5bdb' : fieldConf >= 0.6 ? '#f59e0b' : '#ef4444';
-          confHTML = `
-            <div class="conf-bar-wrap">
-              <div class="conf-bar">
-                <div class="conf-bar-fill" style="width:${pct}%;background:${color}"></div>
-              </div>
-              <span class="conf-label">${pct}% confidence</span>
-            </div>`;
-        }
-
-        fieldsHTML += `
-          <div class="field-row">
-            <div class="field-icon ${iconClass}">${icon}</div>
-            <div class="field-body">
-              <div class="field-label">${label}</div>
-              <div class="field-value">${displayValue}</div>
-              ${confHTML}
-            </div>
-          </div>`;
-      }
-
-      const overallPct = conf.overall !== undefined ? Math.round(conf.overall * 100) : null;
-      const metaHTML = `
-        <div class="meta-row">
-          <span>${overallPct !== null ? '⬤ Overall confidence: ' + overallPct + '%' : ''}</span>
-          <span>${procTime !== undefined ? '⚡ ' + procTime + ' ms' : ''}</span>
-        </div>`;
-
-      resultSection.style.display = 'block';
-      resultSection.innerHTML = `
-        ${warningHTML}
-        <div class="result-card">
-          <div class="result-top">
-            <div class="result-top-left">
-              <div class="result-top-icon">📋</div>
-              <div>
-                <div class="result-title">Extracted Info</div>
-                <div class="result-subtitle">Contact details from card</div>
-              </div>
-            </div>
-            <span class="badge-success">✓ Success</span>
-          </div>
-          <div class="result-body">
-            ${fieldsHTML}
-          </div>
-          ${metaHTML}
-        </div>`;
-    }
-
-    // ── Formatters ─────────────────────────────────────────────────────────
-
-    function esc(str) {
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    }
-
-    function formatPhone(v) {
-      const digits = v.replace(/\D/g, '');
-      return `<a href="tel:${esc(digits)}">${esc(v)}</a>`;
-    }
-
-    function formatEmail(v) {
-      return `<a href="mailto:${esc(v)}">${esc(v)}</a>`;
-    }
-
-    function formatWebsite(v) {
-      const href = /^https?:\/\//i.test(v) ? v : 'https://' + v;
-      return `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(v)}</a>`;
-    }
-  </script>
-</body>
-</html>
+    // ── Image optimization for production speed ────────────────────────────
+    async function optimizeImageForSpeed(file) {
+      return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        img.onload = () => {
+          // Optimal size for OCR accuracy vs speed balance
+          const maxDimension = 1000; // Reduced from 1200 for faster upload
+          let { width, height } = img;
+          
+          if (Math.max(width, height) > maxDimension) {
+            if (width > height) {
+              height = (height * maxDimension) / width;
+              width = maxDimension;
+            } else {
+              width = (width * maxDimension) / height;
+              height = maxDimension;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          // Enhanced image processing for better OCR
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Optimized compression for production
+          canvas.toBlob(resolve, 'image/jpeg', 0.85);
