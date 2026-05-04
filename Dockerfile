@@ -2,6 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+ENV OMP_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+
 # System libraries required by OpenCV (used internally by PaddleOCR)
 RUN apt-get update && apt-get install -y \
     libgl1 \
@@ -16,8 +20,8 @@ RUN apt-get update && apt-get install -y \
 COPY requirements-backend.txt .
 RUN pip install --no-cache-dir -r requirements-backend.txt
 
-# Pre-download PaddleOCR models into the image so cold starts are fast
-RUN python -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=True, lang='en', use_gpu=False, show_log=False)" 2>/dev/null || true
+# Bake PaddleOCR models into the image — no runtime downloads
+RUN python -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=False, lang='en', use_gpu=False, show_log=False); print('Models ready')"
 
 # Copy application files
 COPY main.py extractor.py ./

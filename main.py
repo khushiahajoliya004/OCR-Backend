@@ -24,12 +24,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-reader = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=False, show_log=False)
+reader = PaddleOCR(use_angle_cls=False, lang="en", use_gpu=False, show_log=False)
 
 VALID_API_KEYS = set(os.getenv("API_KEYS", "test123").split(","))
 MAX_FILE_SIZE = 5 * 1024 * 1024
 ALLOWED_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
-MIN_DIMENSION = 1200
+MIN_DIMENSION = 800
 LOW_QUALITY_THRESHOLD = 0.5
 
 
@@ -37,11 +37,9 @@ def preprocess_image(image: Image.Image) -> Image.Image:
     w, h = image.size
     if max(w, h) < MIN_DIMENSION:
         scale = MIN_DIMENSION / max(w, h)
-        image = image.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+        image = image.resize((int(w * scale), int(h * scale)), Image.BILINEAR)
     gray = image.convert("L")
-    gray = ImageEnhance.Contrast(gray).enhance(2.0)
-    gray = ImageEnhance.Sharpness(gray).enhance(2.0)
-    gray = gray.filter(ImageFilter.SHARPEN)
+    gray = ImageEnhance.Contrast(gray).enhance(1.5)
     return gray.convert("RGB")
 
 
