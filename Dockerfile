@@ -14,14 +14,21 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libxrender-dev \
     libgomp1 \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
 COPY requirements-backend.txt .
 RUN pip install --no-cache-dir -r requirements-backend.txt
 
-# Bake PaddleOCR models into the image — no runtime downloads
-RUN python -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=False, lang='en', use_gpu=False, show_log=False); print('Models ready')"
+# Download PaddleOCR models directly — avoids PaddlePaddle segfault during build
+RUN mkdir -p /root/.paddleocr/whl/det/en/en_PP-OCRv3_det_infer \
+             /root/.paddleocr/whl/rec/en/en_PP-OCRv3_rec_infer && \
+    wget -q https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_det_infer.tar -O /tmp/det.tar && \
+    tar -xf /tmp/det.tar -C /root/.paddleocr/whl/det/en/ && \
+    wget -q https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_rec_infer.tar -O /tmp/rec.tar && \
+    tar -xf /tmp/rec.tar -C /root/.paddleocr/whl/rec/en/ && \
+    rm /tmp/det.tar /tmp/rec.tar
 
 # Copy application files
 COPY main.py extractor.py ./
